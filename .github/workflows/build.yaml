@@ -1,0 +1,67 @@
+name: Build Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label for artifacts (e.g., 2025.12.1)'
+        required: true
+        default: '2025.12.1'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            name: macOS-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            name: macOS-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: Windows-x64
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: Linux-x64
+          - platform: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            name: Linux-arm64
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-cache-${{ matrix.target }}"
+          cache-on-failure: true
+
+      - name: Build app
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiro-rs-${{ github.event.inputs.version || github.ref_name }}-${{ matrix.name }}
+          if-no-files-found: error
+          compression-level: 6
+          path: |
+            target/${{ matrix.target }}/release/kiro-rs
+            target/${{ matrix.target }}/release/kiro-rs.exe

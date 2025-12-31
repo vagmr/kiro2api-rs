@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiro-RS 管理面板</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e4e4e7;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #60a5fa; margin-bottom: 24px; font-size: 28px; }
+        h2 { color: #a5b4fc; margin-bottom: 16px; font-size: 18px; }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .value { font-size: 32px; font-weight: 700; color: #60a5fa; }
+        .stat-card .label { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+        .stat-card.success .value { color: #34d399; }
+        .stat-card.warning .value { color: #fbbf24; }
+        .stat-card.error .value { color: #f87171; }
+        
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .toolbar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+        
+        select, input, textarea {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #e4e4e7;
+            font-size: 14px;
+        }
+        select:focus, input:focus, textarea:focus { outline: none; border-color: #60a5fa; }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: #e4e4e7; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        th { color: #9ca3af; font-weight: 500; font-size: 12px; text-transform: uppercase; }
+        
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .status-active { background: rgba(52,211,153,0.2); color: #34d399; }
+        .status-cooldown { background: rgba(251,191,36,0.2); color: #fbbf24; }
+        .status-invalid { background: rgba(248,113,113,0.2); color: #f87171; }
+        .status-disabled { background: rgba(156,163,175,0.2); color: #9ca3af; }
+        
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: #1e293b; border-radius: 16px; padding: 32px;
+            width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;
+        }
+        .modal-content h3 { margin-bottom: 20px; color: #60a5fa; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 6px; color: #9ca3af; font-size: 14px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; }
+        .form-group textarea { min-height: 80px; resize: vertical; font-family: monospace; }
+        .form-group textarea.large { min-height: 150px; }
+        .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+        .form-hint { font-size: 12px; color: #6b7280; margin-top: 4px; }
+        
+        .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .tab {
+            padding: 12px 20px; cursor: pointer; color: #9ca3af;
+            border-bottom: 2px solid transparent; transition: all 0.2s;
+        }
+        .tab:hover { color: #e4e4e7; }
+        .tab.active { color: #60a5fa; border-bottom-color: #60a5fa; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .empty-state { text-align: center; padding: 48px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Kiro-RS 管理面板</h1>
+        
+        <div class="stats-grid" id="stats">
+            <div class="stat-card"><div class="value" id="stat-uptime">-</div><div class="label">运行时间</div></div>
+            <div class="stat-card success"><div class="value" id="stat-active">-</div><div class="label">活跃账号</div></div>
+            <div class="stat-card warning"><div class="value" id="stat-cooldown">-</div><div class="label">冷却中</div></div>
+            <div class="stat-card error"><div class="value" id="stat-invalid">-</div><div class="label">已失效</div></div>
+            <div class="stat-card"><div class="value" id="stat-requests">-</div><div class="label">总请求</div></div>
+            <div class="stat-card error"><div class="value" id="stat-errors">-</div><div class="label">总错误</div></div>
+        </div>
+
+        <div class="card">
+            <h2>账号管理</h2>
+            <div class="toolbar">
+                <button class="btn btn-primary" onclick="showAddModal()">+ 添加账号</button>
+                <button class="btn btn-warning" onclick="showImportModal()">📥 导入 JSON</button>
+                <select id="strategy" onchange="setStrategy(this.value)">
+                    <option value="round-robin">轮询策略</option>
+                    <option value="random">随机策略</option>
+                    <option value="least-used">最少使用</option>
+                </select>
+                <button class="btn btn-secondary" onclick="refresh()">刷新</button>
+            </div>
+            <div id="accounts-table"></div>
+        </div>
+    </div>
+
+    <!-- 添加账号弹窗 -->
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <h3>添加账号</h3>
+            <div class="form-group">
+                <label>名称</label>
+                <input type="text" id="acc-name" placeholder="账号备注名">
+            </div>
+            <div class="form-group">
+                <label>认证方式</label>
+                <select id="acc-auth" onchange="toggleIdcFields()">
+                    <option value="social">Social</option>
+                    <option value="idc">IdC / BuilderId</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Refresh Token</label>
+                <textarea id="acc-refresh" placeholder="粘贴 refreshToken"></textarea>
+            </div>
+            <div id="idc-fields" style="display:none;">
+                <div class="form-group">
+                    <label>Client ID</label>
+                    <input type="text" id="acc-client-id">
+                </div>
+                <div class="form-group">
+                    <label>Client Secret</label>
+                    <textarea id="acc-client-secret"></textarea>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Profile ARN (可选)</label>
+                <input type="text" id="acc-arn" placeholder="arn:aws:codewhisperer:...">
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-secondary" onclick="hideAddModal()">取消</button>
+                <button class="btn btn-primary" onclick="addAccount()">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入账号弹窗 -->
+    <div class="modal" id="importModal">
+        <div class="modal-content">
+            <h3>📥 导入 Kiro 凭证</h3>
+            <div class="form-group">
+                <label>自定义名称 (可选)</label>
+                <input type="text" id="import-name" placeholder="留空则使用 email/label">
+            </div>
+            <div class="form-group">
+                <label>Kiro 原始 JSON</label>
+                <textarea id="import-json" class="large" placeholder='粘贴完整的 Kiro 凭证 JSON，例如：
+{
+  "email": "xxx@example.com",
+  "provider": "BuilderId",
+  "refreshToken": "aorAAAAA...",
+  "clientId": "...",
+  "clientSecret": "...",
+  ...
+}'></textarea>
+                <div class="form-hint">支持直接粘贴从 Kiro IDE 导出的完整 JSON 凭证</div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-secondary" onclick="hideImportModal()">取消</button>
+                <button class="btn btn-warning" onclick="importAccount()">导入</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchApi(url, options = {}) {
+            const res = await fetch(url, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...options.headers }
+            });
+            if (!res.ok && res.status !== 204) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            return res.status === 204 ? null : res.json();
+        }
+
+        function formatUptime(secs) {
+            const h = Math.floor(secs / 3600);
+            const m = Math.floor((secs % 3600) / 60);
+            const s = secs % 60;
+            if (h > 0) return `${h}h ${m}m`;
+            if (m > 0) return `${m}m ${s}s`;
+            return `${s}s`;
+        }
+
+        async function loadStatus() {
+            try {
+                const data = await fetchApi('/api/status');
+                document.getElementById('stat-uptime').textContent = formatUptime(data.uptime_secs);
+                document.getElementById('stat-active').textContent = data.pool.active;
+                document.getElementById('stat-cooldown').textContent = data.pool.cooldown;
+                document.getElementById('stat-invalid').textContent = data.pool.invalid;
+                document.getElementById('stat-requests').textContent = data.pool.total_requests;
+                document.getElementById('stat-errors').textContent = data.pool.total_errors;
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadAccounts() {
+            try {
+                const accounts = await fetchApi('/api/accounts');
+                const container = document.getElementById('accounts-table');
+                
+                if (accounts.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>暂无账号，点击上方按钮添加或导入</p></div>';
+                    return;
+                }
+
+                container.innerHTML = `<table>
+                    <thead><tr><th>名称</th><th>状态</th><th>请求数</th><th>错误数</th><th>最后使用</th><th>操作</th></tr></thead>
+                    <tbody>${accounts.map(a => `<tr>
+                        <td>${a.name}</td>
+                        <td><span class="status-badge status-${a.status}">${a.status}</span></td>
+                        <td>${a.request_count}</td>
+                        <td>${a.error_count}</td>
+                        <td>${a.last_used_at ? new Date(a.last_used_at).toLocaleString() : '-'}</td>
+                        <td>
+                            ${a.status === 'disabled' 
+                                ? `<button class="btn btn-success btn-sm" onclick="enableAccount('${a.id}')">启用</button>`
+                                : `<button class="btn btn-secondary btn-sm" onclick="disableAccount('${a.id}')">禁用</button>`}
+                            <button class="btn btn-danger btn-sm" onclick="removeAccount('${a.id}')">删除</button>
+                        </td>
+                    </tr>`).join('')}</tbody>
+                </table>`;
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadStrategy() {
+            try {
+                const data = await fetchApi('/api/strategy');
+                document.getElementById('strategy').value = data.strategy;
+            } catch (e) { console.error(e); }
+        }
+
+        async function setStrategy(value) {
+            try {
+                await fetchApi('/api/strategy', { method: 'POST', body: JSON.stringify({ strategy: value }) });
+            } catch (e) { alert('设置失败: ' + e.message); }
+        }
+
+        // 添加账号弹窗
+        function showAddModal() { document.getElementById('addModal').classList.add('show'); }
+        function hideAddModal() { document.getElementById('addModal').classList.remove('show'); }
+        
+        // 导入账号弹窗
+        function showImportModal() { document.getElementById('importModal').classList.add('show'); }
+        function hideImportModal() { document.getElementById('importModal').classList.remove('show'); }
+        
+        function toggleIdcFields() {
+            const auth = document.getElementById('acc-auth').value;
+            document.getElementById('idc-fields').style.display = auth === 'idc' ? 'block' : 'none';
+        }
+
+        async function addAccount() {
+            const data = {
+                name: document.getElementById('acc-name').value || '未命名账号',
+                auth_method: document.getElementById('acc-auth').value,
+                refresh_token: document.getElementById('acc-refresh').value,
+                client_id: document.getElementById('acc-client-id').value || null,
+                client_secret: document.getElementById('acc-client-secret').value || null,
+                profile_arn: document.getElementById('acc-arn').value || null,
+            };
+            
+            if (!data.refresh_token) { alert('请填写 Refresh Token'); return; }
+            if (data.auth_method === 'idc' && (!data.client_id || !data.client_secret)) {
+                alert('IdC 认证需要填写 Client ID 和 Client Secret'); return;
+            }
+
+            try {
+                await fetchApi('/api/accounts', { method: 'POST', body: JSON.stringify(data) });
+                hideAddModal();
+                refresh();
+                // 清空表单
+                document.getElementById('acc-name').value = '';
+                document.getElementById('acc-refresh').value = '';
+                document.getElementById('acc-client-id').value = '';
+                document.getElementById('acc-client-secret').value = '';
+                document.getElementById('acc-arn').value = '';
+            } catch (e) { alert('添加失败: ' + e.message); }
+        }
+
+        async function importAccount() {
+            const rawJson = document.getElementById('import-json').value.trim();
+            const name = document.getElementById('import-name').value.trim() || null;
+            
+            if (!rawJson) { alert('请粘贴 JSON 凭证'); return; }
+            
+            // 验证 JSON 格式
+            try {
+                JSON.parse(rawJson);
+            } catch (e) {
+                alert('JSON 格式错误: ' + e.message);
+                return;
+            }
+
+            try {
+                await fetchApi('/api/accounts/import', { 
+                    method: 'POST', 
+                    body: JSON.stringify({ raw_json: rawJson, name: name }) 
+                });
+                hideImportModal();
+                refresh();
+                // 清空表单
+                document.getElementById('import-json').value = '';
+                document.getElementById('import-name').value = '';
+                alert('导入成功！');
+            } catch (e) { alert('导入失败: ' + e.message); }
+        }
+
+        async function removeAccount(id) {
+            if (!confirm('确定删除此账号？')) return;
+            try {
+                await fetchApi(`/api/accounts/${id}`, { method: 'DELETE' });
+                refresh();
+            } catch (e) { alert('删除失败: ' + e.message); }
+        }
+
+        async function enableAccount(id) {
+            try {
+                await fetchApi(`/api/accounts/${id}/enable`, { method: 'POST' });
+                refresh();
+            } catch (e) { alert('启用失败: ' + e.message); }
+        }
+
+        async function disableAccount(id) {
+            try {
+                await fetchApi(`/api/accounts/${id}/disable`, { method: 'POST' });
+                refresh();
+            } catch (e) { alert('禁用失败: ' + e.message); }
+        }
+
+        function refresh() {
+            loadStatus();
+            loadAccounts();
+            loadStrategy();
+        }
+
+        // 初始化
+        refresh();
+        setInterval(loadStatus, 5000);
+    </script>
+</body>
+</html>
