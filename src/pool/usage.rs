@@ -100,7 +100,11 @@ impl RequestLogger {
         let success = self.logs.iter().filter(|l| l.success).count();
         let failed = total - success;
         let total_input_tokens: i64 = self.logs.iter().map(|l| l.input_tokens as i64).sum();
-        let total_output_tokens: i64 = self.logs.iter().map(|l| l.output_tokens as i64).sum();
+        // 忽略 -1（流式请求无法统计）
+        let total_output_tokens: i64 = self.logs.iter()
+            .filter(|l| l.output_tokens >= 0)
+            .map(|l| l.output_tokens as i64)
+            .sum();
         let avg_duration = if total > 0 {
             self.logs.iter().map(|l| l.duration_ms).sum::<u64>() / total as u64
         } else {

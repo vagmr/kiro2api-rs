@@ -382,12 +382,36 @@ impl AccountPool {
         
         // 获取 access_token
         let mut tm_guard = tm.lock().await;
-        let token = tm_guard.ensure_valid_token().await?;
+        let token = match tm_guard.ensure_valid_token().await {
+            Ok(t) => t,
+            Err(e) => {
+                let error_msg = e.to_string();
+                // 检测 403/suspended 错误，自动禁用账号
+                if error_msg.contains("403") || error_msg.contains("suspended") || error_msg.contains("SUSPENDED") {
+                    drop(tm_guard);
+                    drop(managers);
+                    self.mark_invalid(id).await;
+                    tracing::warn!("账号 {} 获取 token 失败，已标记为失效: {}", id, error_msg);
+                }
+                return Err(e);
+            }
+        };
         drop(tm_guard);
         drop(managers);
         
         // 调用 API 获取配额
-        let usage = super::usage::check_usage_limits(&token).await?;
+        let usage = match super::usage::check_usage_limits(&token).await {
+            Ok(u) => u,
+            Err(e) => {
+                let error_msg = e.to_string();
+                // 检测 403/suspended 错误，自动禁用账号
+                if error_msg.contains("403") || error_msg.contains("suspended") || error_msg.contains("SUSPENDED") {
+                    self.mark_invalid(id).await;
+                    tracing::warn!("账号 {} 获取配额失败，已标记为失效: {}", id, error_msg);
+                }
+                return Err(e);
+            }
+        };
         
         // 更新缓存
         let mut cache = self.usage_cache.write().await;

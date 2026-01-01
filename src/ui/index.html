@@ -1,87 +1,594 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kiro-RS 管理面板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.4);
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --bg-dark: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #e4e4e7;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #020617;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
             min-height: 100vh;
             padding: 20px;
+            overflow-x: hidden;
         }
-        .container { max-width: 1400px; margin: 0 auto; }
-        h1 { color: #60a5fa; margin-bottom: 24px; font-size: 28px; }
-        h2 { color: #a5b4fc; margin-bottom: 16px; font-size: 18px; }
-        
-        /* 登录页面样式 */
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        h1 {
+            background: linear-gradient(135deg, #cbd5e1 0%, #ffffff 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 24px;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            text-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        h2 {
+            color: var(--text-main);
+            margin-bottom: 16px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        h3 {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        /* Login */
         .login-container {
-            display: none; align-items: center; justify-content: center;
+            display: none;
+            align-items: center;
+            justify-content: center;
             min-height: calc(100vh - 40px);
         }
+
         .login-box {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 40px;
-            width: 100%; max-width: 400px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 48px;
+            width: 100%;
+            max-width: 420px;
             text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: floatUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
-        .login-box h1 { margin-bottom: 8px; }
-        .login-box p { color: #9ca3af; margin-bottom: 32px; }
+
+        .login-box h1 {
+            margin-bottom: 12px;
+        }
+
+        .login-box p {
+            color: var(--text-muted);
+            margin-bottom: 32px;
+            font-weight: 300;
+        }
+
         .login-box input {
-            width: 100%; padding: 14px 18px; margin-bottom: 16px;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px; color: #e4e4e7; font-size: 14px;
-        }
-        .login-box input:focus { outline: none; border-color: #60a5fa; }
-        .login-box .btn { width: 100%; padding: 14px; }
-        .login-error { color: #f87171; margin-bottom: 16px; display: none; }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-        .stat-card {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 16px;
-            text-align: center;
-        }
-        .stat-card .value { font-size: 28px; font-weight: 700; color: #60a5fa; }
-        .stat-card .label { font-size: 11px; color: #9ca3af; margin-top: 4px; }
-        .stat-card.success .value { color: #34d399; }
-        .stat-card.warning .value { color: #fbbf24; }
-        .stat-card.error .value { color: #f87171; }
-        
-        .card {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 20px;
+            width: 100%;
             margin-bottom: 20px;
         }
-        
-        .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-        
-        select, input, textarea {
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: #e4e4e7;
-            font-size: 13px;
+
+        .login-box .btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 15px;
         }
-        select:focus, input:focus, textarea:focus { outline: none; border-color: #60a5fa; }
-</style>
+
+        .login-error {
+            color: var(--error);
+            margin-bottom: 16px;
+            font-size: 14px;
+            background: rgba(239, 68, 68, 0.1);
+            padding: 8px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s ease, background 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            background: rgba(30, 41, 59, 0.6);
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 4px;
+            text-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .stat-card.success .value {
+            color: var(--success);
+            text-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+        }
+
+        .stat-card.warning .value {
+            color: var(--warning);
+            text-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+        }
+
+        .stat-card.error .value {
+            color: var(--error);
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+        }
+
+        /* Main Card */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        /* Controls */
+        select,
+        input,
+        textarea {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px 16px;
+            color: var(--text-main);
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        select:focus,
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            filter: brightness(1.1);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-success:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px;
+            border-radius: 16px;
+            width: fit-content;
+        }
+
+        .tab {
+            padding: 10px 24px;
+            cursor: pointer;
+            color: var(--text-muted);
+            border-radius: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            background: transparent;
+        }
+
+        .tab:hover {
+            color: var(--text-main);
+        }
+
+        .tab.active {
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 4px;
+            font-size: 14px;
+        }
+
+        th {
+            text-align: left;
+            padding: 16px;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        tr {
+            transition: background 0.2s;
+        }
+
+        tbody tr {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: scale(1.002);
+        }
+
+        td {
+            padding: 16px;
+            border: none;
+        }
+
+        tbody tr td:first-child {
+            border-top-left-radius: 12px;
+            border-bottom-left-radius: 12px;
+            color: white;
+            font-weight: 500;
+        }
+
+        tbody tr td:last-child {
+            border-top-right-radius: 12px;
+            border-bottom-right-radius: 12px;
+        }
+
+        /* Status & Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .status-active::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #34d399;
+        }
+
+        .status-cooldown {
+            background: rgba(245, 158, 11, 0.1);
+            color: #fbbf24;
+            border-color: rgba(245, 158, 11, 0.2);
+        }
+
+        .status-invalid {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .status-disabled {
+            background: rgba(148, 163, 184, 0.1);
+            color: #94a3b8;
+            border-color: rgba(148, 163, 184, 0.2);
+        }
+
+        /* Usage Bar */
+        .usage-bar {
+            width: 120px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .usage-bar-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .usage-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        .usage-bar-fill.warning {
+            background: var(--warning);
+        }
+
+        .usage-bar-fill.danger {
+            background: var(--error);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 32px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: zoomIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+        }
+
+        .form-group textarea {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            min-height: 80px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes floatUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes zoomIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        .empty-state {
+            padding: 60px;
+            color: var(--text-muted);
+            font-size: 16px;
+            opacity: 0.7;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
 </head>
+
 <body>
     <!-- 登录页面 -->
     <div class="login-container" id="loginPage">
@@ -90,33 +597,63 @@
             <p>请输入 API 密钥登录管理面板</p>
             <div class="login-error" id="loginError">密钥错误，请重试</div>
             <input type="password" id="apiKeyInput" placeholder="API 密钥" onkeypress="if(event.key==='Enter')login()">
-            <button class="btn btn-primary" onclick="login()">登录</button>
+            <button class="btn btn-primary" onclick="login()">马上登录</button>
         </div>
     </div>
 
     <!-- 主面板 -->
     <div class="container" id="mainPanel" style="display:none;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h1>🚀 Kiro-RS 管理面板</h1>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span style="font-size:32px">🚀</span>
+                <div>
+                    <h1>Kiro-RS 管理面板</h1>
+                    <div style="font-size:13px;color:var(--text-muted);margin-top:-20px;">高性能 AI 服务管理系统</div>
+                </div>
+            </div>
             <button class="btn btn-secondary btn-sm" onclick="logout()">退出登录</button>
         </div>
-        
+
         <!-- 统计卡片 -->
         <div class="stats-grid" id="stats">
-            <div class="stat-card"><div class="value" id="stat-uptime">-</div><div class="label">运行时间</div></div>
-            <div class="stat-card success"><div class="value" id="stat-active">-</div><div class="label">活跃账号</div></div>
-            <div class="stat-card warning"><div class="value" id="stat-cooldown">-</div><div class="label">冷却中</div></div>
-            <div class="stat-card error"><div class="value" id="stat-invalid">-</div><div class="label">已失效</div></div>
-            <div class="stat-card"><div class="value" id="stat-requests">-</div><div class="label">总请求</div></div>
-            <div class="stat-card error"><div class="value" id="stat-errors">-</div><div class="label">总错误</div></div>
-            <div class="stat-card"><div class="value" id="stat-input-tokens">-</div><div class="label">输入Tokens</div></div>
-            <div class="stat-card"><div class="value" id="stat-output-tokens">-</div><div class="label">输出Tokens</div></div>
+            <div class="stat-card">
+                <div class="value" id="stat-uptime">-</div>
+                <div class="label">运行时间</div>
+            </div>
+            <div class="stat-card success">
+                <div class="value" id="stat-active">-</div>
+                <div class="label">活跃账号</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="value" id="stat-cooldown">-</div>
+                <div class="label">冷却中</div>
+            </div>
+            <div class="stat-card error">
+                <div class="value" id="stat-invalid">-</div>
+                <div class="label">已失效</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="stat-requests">-</div>
+                <div class="label">总请求</div>
+            </div>
+            <div class="stat-card error">
+                <div class="value" id="stat-errors">-</div>
+                <div class="label">总错误</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="stat-input-tokens">-</div>
+                <div class="label">输入Tokens</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="stat-output-tokens">-</div>
+                <div class="label">输出Tokens</div>
+            </div>
         </div>
 
         <!-- 标签页 -->
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('accounts')">账号管理</div>
-            <div class="tab" onclick="switchTab('logs')">请求记录</div>
+            <button class="tab active" onclick="switchTab('accounts')">账号管理</button>
+            <button class="tab" onclick="switchTab('logs')">请求记录</button>
         </div>
 
         <!-- 账号管理 -->
@@ -125,6 +662,7 @@
                 <button class="btn btn-primary" onclick="showAddModal()">+ 添加账号</button>
                 <button class="btn btn-warning" onclick="showImportModal()">📥 导入</button>
                 <button class="btn btn-secondary" onclick="refreshAllUsage()">🔄 刷新配额</button>
+                <div style="flex-grow:1"></div>
                 <select id="strategy" onchange="setStrategy(this.value)">
                     <option value="round-robin">轮询策略</option>
                     <option value="random">随机策略</option>
@@ -175,7 +713,7 @@
             </div>
             <div class="form-actions">
                 <button class="btn btn-secondary" onclick="hideAddModal()">取消</button>
-                <button class="btn btn-primary" onclick="addAccount()">添加</button>
+                <button class="btn btn-primary" onclick="addAccount()">确认添加</button>
             </div>
         </div>
     </div>
@@ -194,78 +732,10 @@
             </div>
             <div class="form-actions">
                 <button class="btn btn-secondary" onclick="hideImportModal()">取消</button>
-                <button class="btn btn-warning" onclick="importAccount()">导入</button>
+                <button class="btn btn-warning" onclick="importAccount()">开始导入</button>
             </div>
         </div>
     </div>
-
-    <style>
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .btn-primary { background: #3b82f6; color: white; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-success { background: #10b981; color: white; }
-        .btn-success:hover { background: #059669; }
-        .btn-danger { background: #ef4444; color: white; }
-        .btn-danger:hover { background: #dc2626; }
-        .btn-secondary { background: rgba(255,255,255,0.1); color: #e4e4e7; }
-        .btn-secondary:hover { background: rgba(255,255,255,0.2); }
-        .btn-warning { background: #f59e0b; color: white; }
-        .btn-warning:hover { background: #d97706; }
-        .btn-sm { padding: 6px 12px; font-size: 12px; }
-        
-        .tabs { display: flex; gap: 0; margin-bottom: 0; }
-        .tab {
-            padding: 12px 24px; cursor: pointer; color: #9ca3af;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-bottom: none;
-            border-radius: 8px 8px 0 0;
-            margin-right: 4px;
-        }
-        .tab:hover { color: #e4e4e7; background: rgba(255,255,255,0.05); }
-        .tab.active { color: #60a5fa; background: rgba(255,255,255,0.05); border-bottom: 2px solid #60a5fa; }
-        
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        th { color: #9ca3af; font-weight: 500; font-size: 11px; text-transform: uppercase; }
-        
-        .status-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
-        .status-active { background: rgba(52,211,153,0.2); color: #34d399; }
-        .status-cooldown { background: rgba(251,191,36,0.2); color: #fbbf24; }
-        .status-invalid { background: rgba(248,113,113,0.2); color: #f87171; }
-        .status-disabled { background: rgba(156,163,175,0.2); color: #9ca3af; }
-        
-        .usage-bar { width: 100px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
-        .usage-bar-fill { height: 100%; background: #34d399; transition: width 0.3s; }
-        .usage-bar-fill.warning { background: #fbbf24; }
-        .usage-bar-fill.danger { background: #f87171; }
-        
-        .modal {
-            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 1000;
-        }
-        .modal.show { display: flex; }
-        .modal-content {
-            background: #1e293b; border-radius: 16px; padding: 28px;
-            width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
-        }
-        .modal-content h3 { margin-bottom: 20px; color: #60a5fa; }
-        .form-group { margin-bottom: 14px; }
-        .form-group label { display: block; margin-bottom: 6px; color: #9ca3af; font-size: 13px; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; }
-        .form-group textarea { min-height: 70px; resize: vertical; font-family: monospace; font-size: 12px; }
-        .form-group textarea.large { min-height: 120px; }
-        .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
-        .empty-state { text-align: center; padding: 40px; color: #6b7280; }
-    </style>
 
     <script>
         let apiKey = localStorage.getItem('kiro_api_key') || '';
@@ -340,7 +810,7 @@
                 document.getElementById('stat-requests').textContent = formatNumber(data.pool.total_requests);
                 document.getElementById('stat-errors').textContent = data.pool.total_errors;
             } catch (e) { console.error(e); }
-            
+
             // 加载请求统计
             try {
                 const stats = await fetchApi('/api/logs/stats');
@@ -353,26 +823,26 @@
             try {
                 const accounts = await fetchApi('/api/accounts');
                 const container = document.getElementById('accounts-table');
-                
+
                 if (accounts.length === 0) {
-                    container.innerHTML = '<div class="empty-state"><p>暂无账号，点击上方按钮添加或导入</p></div>';
+                    container.innerHTML = '<div class="empty-state"><p>🚀 暂无账号，点击上方按钮添加或导入</p></div>';
                     return;
                 }
 
                 container.innerHTML = `<table>
                     <thead><tr><th>名称</th><th>状态</th><th>配额</th><th>请求</th><th>错误</th><th>最后使用</th><th>操作</th></tr></thead>
                     <tbody>${accounts.map(a => {
-                        const usage = usageCache[a.id];
-                        let usageHtml = '<span style="color:#6b7280">未获取</span>';
-                        if (usage) {
-                            const pct = usage.usage_limit > 0 ? (usage.available / usage.usage_limit * 100) : 0;
-                            const cls = pct < 10 ? 'danger' : pct < 30 ? 'warning' : '';
-                            usageHtml = `<div style="display:flex;align-items:center;gap:8px;">
+                    const usage = usageCache[a.id];
+                    let usageHtml = '<span style="color:var(--text-muted)">?</span>';
+                    if (usage) {
+                        const pct = usage.usage_limit > 0 ? (usage.available / usage.usage_limit * 100) : 0;
+                        const cls = pct < 10 ? 'danger' : pct < 30 ? 'warning' : '';
+                        usageHtml = `<div style="display:flex;align-items:center;gap:12px;">
                                 <div class="usage-bar"><div class="usage-bar-fill ${cls}" style="width:${pct}%"></div></div>
-                                <span style="font-size:11px">${usage.available.toFixed(1)}/${usage.usage_limit.toFixed(0)}</span>
+                                <span style="font-size:12px">${usage.available.toFixed(1)}</span>
                             </div>`;
-                        }
-                        return `<tr>
+                    }
+                    return `<tr>
                             <td>${a.name}</td>
                             <td><span class="status-badge status-${a.status}">${a.status}</span></td>
                             <td>${usageHtml}</td>
@@ -380,14 +850,16 @@
                             <td>${a.error_count}</td>
                             <td>${a.last_used_at ? new Date(a.last_used_at).toLocaleString() : '-'}</td>
                             <td>
-                                <button class="btn btn-secondary btn-sm" onclick="refreshUsage('${a.id}')" title="刷新配额">🔄</button>
-                                ${a.status === 'disabled' 
-                                    ? `<button class="btn btn-success btn-sm" onclick="enableAccount('${a.id}')">启用</button>`
-                                    : `<button class="btn btn-secondary btn-sm" onclick="disableAccount('${a.id}')">禁用</button>`}
-                                <button class="btn btn-danger btn-sm" onclick="removeAccount('${a.id}')">删除</button>
+                                <div style="display:flex;gap:6px;">
+                                    <button class="btn btn-secondary btn-sm" onclick="refreshUsage('${a.id}')" title="刷新配额">🔄</button>
+                                    ${a.status === 'disabled'
+                            ? `<button class="btn btn-success btn-sm" onclick="enableAccount('${a.id}')">启用</button>`
+                            : `<button class="btn btn-secondary btn-sm" onclick="disableAccount('${a.id}')">禁用</button>`}
+                                    <button class="btn btn-danger btn-sm" onclick="removeAccount('${a.id}')">删除</button>
+                                </div>
                             </td>
                         </tr>`;
-                    }).join('')}</tbody>
+                }).join('')}</tbody>
                 </table>`;
             } catch (e) { console.error(e); }
         }
@@ -396,9 +868,9 @@
             try {
                 const logs = await fetchApi('/api/logs');
                 const container = document.getElementById('logs-table');
-                
+
                 if (!logs || logs.length === 0) {
-                    container.innerHTML = '<div class="empty-state"><p>暂无请求记录</p></div>';
+                    container.innerHTML = '<div class="empty-state"><p>📭 暂无请求记录</p></div>';
                     return;
                 }
 
@@ -407,13 +879,13 @@
                     <tbody>${logs.map(l => `<tr>
                         <td>${new Date(l.timestamp).toLocaleString()}</td>
                         <td>${l.account_name}</td>
-                        <td style="font-size:11px">${l.model}</td>
+                        <td style="font-size:12px;opacity:0.8">${l.model}</td>
                         <td>${l.input_tokens}</td>
-                        <td>${l.output_tokens}</td>
+                        <td>${l.output_tokens < 0 ? '-' : l.output_tokens}</td>
                         <td>${l.duration_ms}ms</td>
-                        <td>${l.success 
-                            ? '<span class="status-badge status-active">成功</span>' 
-                            : `<span class="status-badge status-invalid" title="${l.error || ''}">失败</span>`}</td>
+                        <td>${l.success
+                        ? '<span class="status-badge status-active">成功</span>'
+                        : `<span class="status-badge status-invalid" title="${l.error || ''}">失败</span>`}</td>
                     </tr>`).join('')}</tbody>
                 </table>`;
             } catch (e) { console.error(e); }
@@ -506,7 +978,13 @@
             catch (e) { alert('禁用失败: ' + e.message); }
         }
 
-        function refresh() { loadStatus(); loadAccounts(); loadStrategy(); }
+        async function loadUsageCache() {
+            try {
+                usageCache = await fetchApi('/api/usage');
+            } catch (e) { console.error('加载配额缓存失败:', e); }
+        }
+
+        function refresh() { loadStatus(); loadUsageCache().then(() => loadAccounts()); loadStrategy(); }
 
         (async () => {
             if (await checkAuth()) { showMainPanel(); }
@@ -515,4 +993,5 @@
         setInterval(() => { if (apiKey) loadStatus(); }, 5000);
     </script>
 </body>
+
 </html>

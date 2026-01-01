@@ -275,7 +275,7 @@ async fn handle_stream_request(
         }
     };
 
-    // 记录成功的流式请求（输出 tokens 暂时设为 0，因为流式无法准确统计）
+    // 记录成功的流式请求（输出 tokens 设为 -1 表示流式无法统计）
     if let (Some(id), Some(pool)) = (&account_id, &pool) {
         let log = crate::pool::RequestLog {
             id: uuid::Uuid::new_v4().to_string(),
@@ -283,7 +283,7 @@ async fn handle_stream_request(
             account_name,
             model: model.to_string(),
             input_tokens,
-            output_tokens: 0, // 流式请求无法准确统计
+            output_tokens: -1, // 流式请求无法统计输出 tokens
             success: true,
             error: None,
             timestamp: chrono::Utc::now(),

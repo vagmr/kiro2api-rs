@@ -76,6 +76,7 @@ pub fn create_ui_router(state: UiState) -> Router {
         .route("/api/logs", get(get_request_logs))
         .route("/api/logs/stats", get(get_request_stats))
         .route("/api/usage/refresh", post(refresh_all_usage))
+        .route("/api/usage", get(get_all_usage))
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .with_state(state.clone());
 
@@ -377,4 +378,10 @@ async fn refresh_all_usage(State(state): State<UiState>) -> impl IntoResponse {
         })
         .collect();
     Json(response)
+}
+
+/// 获取所有配额缓存
+async fn get_all_usage(State(state): State<UiState>) -> impl IntoResponse {
+    let usage = state.pool.get_all_usage().await;
+    Json(usage)
 }

@@ -96,8 +96,21 @@ cargo build --release
 ```
 
 **账号池模式（带 Web 管理面板）：**
+
+*Linux / macOS:*
 ```bash
 POOL_MODE=true ./target/release/kiro-rs
+```
+
+*Windows PowerShell:*
+```powershell
+$env:POOL_MODE="true"; ./target/release/kiro-rs
+```
+
+*Windows CMD:*
+```cmd
+set POOL_MODE=true
+target\release\kiro-rs
 ```
 
 ## 运行模式
@@ -114,6 +127,11 @@ POOL_MODE=true ./target/release/kiro-rs
 - 账号状态追踪（活跃/冷却/失效/禁用）
 - Web 管理面板（访问 `http://服务地址/`）
 - 账号持久化存储
+
+> **注意**：开启账号池模式后，系统**不再**读取 `credentials.json` 文件。
+> 账号数据存储在 `data/accounts.json` 中。您可以：
+> 1. 启动服务后通过 Web 管理面板添加账号（推荐）
+> 2. 手动创建 `data/accounts.json` 文件（参考根目录下的 `accounts.example.json`）
 
 ## 环境变量
 
