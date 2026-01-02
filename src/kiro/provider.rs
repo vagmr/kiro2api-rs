@@ -62,7 +62,10 @@ impl KiroProvider {
             let tm = self.token_manager.lock().await;
             tm.config().region.clone()
         };
-        format!("https://q.{}.amazonaws.com/generateAssistantResponse", region)
+        format!(
+            "https://q.{}.amazonaws.com/generateAssistantResponse",
+            region
+        )
     }
 
     /// 获取 API 基础域名
@@ -179,10 +182,7 @@ impl KiroProvider {
     ///
     /// # Returns
     /// 返回原始的 HTTP Response，调用方负责处理流式数据
-    pub async fn call_api_stream(
-        &self,
-        request_body: &str,
-    ) -> anyhow::Result<reqwest::Response> {
+    pub async fn call_api_stream(&self, request_body: &str) -> anyhow::Result<reqwest::Response> {
         let (token, config, credentials) = self.acquire_token_snapshot().await?;
         let url = format!(
             "https://q.{}.amazonaws.com/generateAssistantResponse",
@@ -245,15 +245,10 @@ mod tests {
         credentials.profile_arn = Some("arn:aws:sso::123456789:profile/test".to_string());
         credentials.refresh_token = Some("a".repeat(150));
 
-        let tm = TokenManager::new(config, credentials, None);
-        let provider = KiroProvider::new(tm);
-        let headers = provider.build_headers("test_token").await.unwrap();
+        let headers = KiroProvider::build_headers("test_token", &credentials, &config).unwrap();
 
         assert_eq!(headers.get(CONTENT_TYPE).unwrap(), "application/json");
-        assert_eq!(
-            headers.get("x-amzn-codewhisperer-optout").unwrap(),
-            "true"
-        );
+        assert_eq!(headers.get("x-amzn-codewhisperer-optout").unwrap(), "true");
         assert_eq!(headers.get("x-amzn-kiro-agent-mode").unwrap(), "vibe");
         assert!(headers
             .get(AUTHORIZATION)

@@ -8,7 +8,9 @@ use crate::kiro::model::requests::conversation::{
     AssistantMessage, ConversationState, CurrentMessage, HistoryAssistantMessage,
     HistoryUserMessage, KiroImage, Message, UserInputMessage, UserInputMessageContext, UserMessage,
 };
-use crate::kiro::model::requests::tool::{InputSchema, Tool, ToolResult, ToolSpecification, ToolUseEntry};
+use crate::kiro::model::requests::tool::{
+    InputSchema, Tool, ToolResult, ToolSpecification, ToolUseEntry,
+};
 
 use super::types::{ContentBlock, MessagesRequest, Thinking};
 
@@ -36,14 +38,15 @@ pub fn map_model(model: &str) -> Option<String> {
 #[derive(Debug)]
 pub struct ConversionResult {
     /// 转换后的 Kiro 请求
-    pub conversation_state: ConversationState
+    pub conversation_state: ConversationState,
 }
 
 /// 转换错误
 #[derive(Debug)]
 pub enum ConversionError {
     UnsupportedModel(String),
-    EmptyMessages
+    EmptyMessages,
+    NoUserMessagesAtEnd,
 }
 
 impl std::fmt::Display for ConversionError {
@@ -51,6 +54,9 @@ impl std::fmt::Display for ConversionError {
         match self {
             ConversionError::UnsupportedModel(model) => write!(f, "模型不支持: {}", model),
             ConversionError::EmptyMessages => write!(f, "消息列表为空"),
+            ConversionError::NoUserMessagesAtEnd => {
+                write!(f, "消息列表末尾没有 user 消息，无法构建 current_message")
+            }
         }
     }
 }
@@ -68,6 +74,16 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
         return Err(ConversionError::EmptyMessages);
     }
 
+    // 2.1 合并末尾连续的 user 消息（并行 tool_result 往往会拆成多个 user 消息）
+    let mut current_start = req.messages.len();
+    while current_start > 0 && req.messages[current_start - 1].role == "user" {
+        current_start -= 1;
+    }
+    let current_user_messages = &req.messages[current_start..];
+    if current_user_messages.is_empty() {
+        return Err(ConversionError::NoUserMessagesAtEnd);
+    }
+
     // 3. 生成会话 ID 和代理 ID
     let conversation_id = Uuid::new_v4().to_string();
     let agent_continuation_id = Uuid::new_v4().to_string();
@@ -75,9 +91,16 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
     // 4. 确定触发类型
     let chat_trigger_type = determine_chat_trigger_type(req);
 
-    // 5. 处理最后一条消息作为 current_message
-    let last_message = req.messages.last().unwrap();
-    let (text_content, images, tool_results) = process_message_content(&last_message.content)?;
+    // 5. 处理末尾的 user 消息组作为 current_message
+    let current_refs: Vec<&super::types::Message> = current_user_messages.iter().collect();
+    let merged_current = merge_user_messages(&current_refs, &model_id)?;
+    let text_content = merged_current.user_input_message.content.clone();
+    let images = merged_current.user_input_message.images.clone();
+    let tool_results = merged_current
+        .user_input_message
+        .user_input_message_context
+        .tool_results
+        .clone();
 
     // 6. 转换工具定义
     let tools = convert_tools(&req.tools);
@@ -105,8 +128,18 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
 
     let current_message = CurrentMessage::new(user_input);
 
-    // 9. 构建历史消息
-    let history = build_history(req, &model_id)?;
+    // 9. 构建历史消息（排除 current_message 对应的末尾 user 消息组）
+    let history_req = MessagesRequest {
+        model: req.model.clone(),
+        max_tokens: req.max_tokens,
+        messages: req.messages[..current_start].to_vec(),
+        stream: req.stream,
+        system: req.system.clone(),
+        tools: req.tools.clone(),
+        tool_choice: req.tool_choice.clone(),
+        thinking: req.thinking.clone(),
+    };
+    let history = build_history(&history_req, &model_id)?;
 
     // 10. 构建 ConversationState
     let conversation_state = ConversationState::new(conversation_id)
@@ -116,9 +149,7 @@ pub fn convert_request(req: &MessagesRequest) -> Result<ConversionResult, Conver
         .with_current_message(current_message)
         .with_history(history);
 
-    Ok(ConversionResult {
-        conversation_state
-    })
+    Ok(ConversionResult { conversation_state })
 }
 
 /// 确定聊天触发类型
@@ -137,7 +168,7 @@ fn determine_chat_trigger_type(req: &MessagesRequest) -> String {
 
 /// 处理消息内容，提取文本、图片和工具结果
 fn process_message_content(
-    content: &serde_json::Value
+    content: &serde_json::Value,
 ) -> Result<(String, Vec<KiroImage>, Vec<ToolResult>), ConversionError> {
     let mut text_parts = Vec::new();
     let mut images = Vec::new();
@@ -173,7 +204,8 @@ fn process_message_content(
                                 } else {
                                     ToolResult::success(&tool_use_id, result_content)
                                 };
-                                result.status = Some(if is_error { "error" } else { "success" }.to_string());
+                                result.status =
+                                    Some(if is_error { "error" } else { "success" }.to_string());
 
                                 tool_results.push(result);
                             }
@@ -272,10 +304,7 @@ fn has_thinking_tags(content: &str) -> bool {
 }
 
 /// 构建历史消息
-fn build_history(
-    req: &MessagesRequest,
-    model_id: &str,
-) -> Result<Vec<Message>, ConversionError> {
+fn build_history(req: &MessagesRequest, model_id: &str) -> Result<Vec<Message>, ConversionError> {
     let mut history = Vec::new();
 
     // 生成thinking前缀（如果需要）
@@ -457,7 +486,10 @@ fn convert_assistant_message(
     // 格式: <thinking>思考内容</thinking>\n\ntext内容
     let final_content = if !thinking_content.is_empty() {
         if !text_content.is_empty() {
-            format!("<thinking>{}</thinking>\n\n{}", thinking_content, text_content)
+            format!(
+                "<thinking>{}</thinking>\n\n{}",
+                thinking_content, text_content
+            )
         } else {
             format!("<thinking>{}</thinking>", thinking_content)
         }
@@ -478,21 +510,31 @@ fn convert_assistant_message(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::anthropic::types;
+    use serde_json::json;
 
     #[test]
     fn test_map_model_sonnet() {
-        assert!(map_model("claude-sonnet-4-20250514").unwrap().contains("sonnet"));
-        assert!(map_model("claude-3-5-sonnet-20241022").unwrap().contains("sonnet"));
+        assert!(map_model("claude-sonnet-4-20250514")
+            .unwrap()
+            .contains("sonnet"));
+        assert!(map_model("claude-3-5-sonnet-20241022")
+            .unwrap()
+            .contains("sonnet"));
     }
 
     #[test]
     fn test_map_model_opus() {
-        assert!(map_model("claude-opus-4-20250514").unwrap().contains("opus"));
+        assert!(map_model("claude-opus-4-20250514")
+            .unwrap()
+            .contains("opus"));
     }
 
     #[test]
     fn test_map_model_haiku() {
-        assert!(map_model("claude-haiku-4-20250514").unwrap().contains("haiku"));
+        assert!(map_model("claude-haiku-4-20250514")
+            .unwrap()
+            .contains("haiku"));
     }
 
     #[test]
@@ -522,5 +564,92 @@ mod tests {
         assert!(is_unsupported_tool("websearch"));
         assert!(is_unsupported_tool("WebSearch"));
         assert!(!is_unsupported_tool("read_file"));
+    }
+
+    #[test]
+    fn test_parallel_tool_results_split_across_user_messages_are_merged_into_current_message() {
+        let req = MessagesRequest {
+            model: "claude-sonnet-4".to_string(),
+            max_tokens: 1024,
+            stream: false,
+            system: None,
+            tools: None,
+            tool_choice: None,
+            thinking: None,
+            messages: vec![
+                types::Message {
+                    role: "user".to_string(),
+                    content: json!("read two files"),
+                },
+                types::Message {
+                    role: "assistant".to_string(),
+                    content: json!([
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_1",
+                            "name": "filesystem_read",
+                            "input": {"filePath": "a.txt"}
+                        },
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_2",
+                            "name": "filesystem_read",
+                            "input": {"filePath": "b.txt"}
+                        }
+                    ]),
+                },
+                types::Message {
+                    role: "user".to_string(),
+                    content: json!([
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_1",
+                            "content": "result a",
+                            "is_error": false
+                        }
+                    ]),
+                },
+                types::Message {
+                    role: "user".to_string(),
+                    content: json!([
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_2",
+                            "content": "result b",
+                            "is_error": false
+                        }
+                    ]),
+                },
+            ],
+        };
+
+        let res = convert_request(&req).unwrap();
+
+        // 两个 tool_result 都应该在 current_message 里
+        assert_eq!(
+            res.conversation_state
+                .current_message
+                .user_input_message
+                .user_input_message_context
+                .tool_results
+                .len(),
+            2
+        );
+
+        // history 只包含最初 user + tool_use 的 assistant
+        assert_eq!(res.conversation_state.history.len(), 2);
+
+        // assistant 历史里应该保留两个 tool_use
+        match &res.conversation_state.history[1] {
+            crate::kiro::model::requests::conversation::Message::Assistant(a) => {
+                let tool_uses = a
+                    .assistant_response_message
+                    .tool_uses
+                    .as_ref()
+                    .expect("assistant tool_uses should exist");
+                assert_eq!(tool_uses.len(), 2);
+            }
+            _ => panic!("expected assistant message"),
+        }
     }
 }

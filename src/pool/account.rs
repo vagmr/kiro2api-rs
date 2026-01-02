@@ -1,8 +1,8 @@
 //! 账号状态管理
 
+use crate::kiro::model::credentials::KiroCredentials;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::kiro::model::credentials::KiroCredentials;
 
 /// 账号状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,7 +44,11 @@ pub struct Account {
 
 impl Account {
     /// 创建新账号
-    pub fn new(id: impl Into<String>, name: impl Into<String>, credentials: KiroCredentials) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        credentials: KiroCredentials,
+    ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),

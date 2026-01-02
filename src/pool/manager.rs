@@ -99,7 +99,7 @@ impl AccountPool {
 
         let content = tokio::fs::read_to_string(&file_path).await?;
         let stored: Vec<StoredAccount> = serde_json::from_str(&content)?;
-        
+
         let mut count = 0;
         for stored_account in stored {
             let account = stored_account.into_account();
@@ -124,10 +124,8 @@ impl AccountPool {
         tokio::fs::create_dir_all(data_dir).await?;
 
         let accounts = self.accounts.read().await;
-        let stored: Vec<StoredAccount> = accounts
-            .values()
-            .map(StoredAccount::from_account)
-            .collect();
+        let stored: Vec<StoredAccount> =
+            accounts.values().map(StoredAccount::from_account).collect();
 
         let content = serde_json::to_string_pretty(&stored)?;
         let file_path = data_dir.join(ACCOUNTS_FILE);
@@ -141,14 +139,10 @@ impl AccountPool {
     async fn add_account_internal(&self, account: Account) -> anyhow::Result<()> {
         let id = account.id.clone();
         let credentials = account.credentials.clone();
-        
+
         // 创建 TokenManager
-        let token_manager = TokenManager::new(
-            self.config.clone(),
-            credentials,
-            self.proxy.clone(),
-        );
-        
+        let token_manager = TokenManager::new(self.config.clone(), credentials, self.proxy.clone());
+
         let tm = Arc::new(tokio::sync::Mutex::new(token_manager));
         let provider = Arc::new(KiroProvider::with_shared_token_manager(
             tm.clone(),
@@ -162,7 +156,7 @@ impl AccountPool {
         accounts.insert(id.clone(), account);
         managers.insert(id.clone(), tm);
         providers.insert(id, provider);
-        
+
         Ok(())
     }
 
@@ -178,11 +172,11 @@ impl AccountPool {
         let mut accounts = self.accounts.write().await;
         let mut managers = self.token_managers.write().await;
         let mut providers = self.providers.write().await;
-        
+
         managers.remove(id);
         providers.remove(id);
         let removed = accounts.remove(id);
-        
+
         // 保存到文件
         drop(accounts);
         drop(managers);
@@ -190,7 +184,7 @@ impl AccountPool {
         if let Err(e) = self.save_to_file().await {
             tracing::warn!("保存账号文件失败: {}", e);
         }
-        
+
         removed
     }
 
@@ -326,7 +320,10 @@ impl AccountPool {
             account.record_error(is_rate_limit);
             tracing::info!(
                 "账号 {} 记录错误，限流: {}，当前错误数: {}，状态: {:?}",
-                id, is_rate_limit, account.error_count, account.status
+                id,
+                is_rate_limit,
+                account.error_count,
+                account.status
             );
             drop(accounts);
             let _ = self.save_to_file().await;
@@ -338,10 +335,7 @@ impl AccountPool {
         let mut accounts = self.accounts.write().await;
         if let Some(account) = accounts.get_mut(id) {
             account.mark_invalid();
-            tracing::warn!(
-                "账号 {} 已标记为失效，错误数: {}",
-                id, account.error_count
-            );
+            tracing::warn!("账号 {} 已标记为失效，错误数: {}", id, account.error_count);
             drop(accounts);
             let _ = self.save_to_file().await;
         }
@@ -350,12 +344,24 @@ impl AccountPool {
     /// 获取统计信息
     pub async fn get_stats(&self) -> PoolStats {
         let accounts = self.accounts.read().await;
-        
+
         let total = accounts.len();
-        let active = accounts.values().filter(|a| a.status == AccountStatus::Active).count();
-        let cooldown = accounts.values().filter(|a| a.status == AccountStatus::Cooldown).count();
-        let invalid = accounts.values().filter(|a| a.status == AccountStatus::Invalid).count();
-        let disabled = accounts.values().filter(|a| a.status == AccountStatus::Disabled).count();
+        let active = accounts
+            .values()
+            .filter(|a| a.status == AccountStatus::Active)
+            .count();
+        let cooldown = accounts
+            .values()
+            .filter(|a| a.status == AccountStatus::Cooldown)
+            .count();
+        let invalid = accounts
+            .values()
+            .filter(|a| a.status == AccountStatus::Invalid)
+            .count();
+        let disabled = accounts
+            .values()
+            .filter(|a| a.status == AccountStatus::Disabled)
+            .count();
         let total_requests: u64 = accounts.values().map(|a| a.request_count).sum();
         let total_errors: u64 = accounts.values().map(|a| a.error_count).sum();
 
@@ -374,7 +380,7 @@ impl AccountPool {
     pub async fn add_request_log(&self, log: RequestLog) {
         let mut logger = self.request_logger.write().await;
         logger.add(log);
-        
+
         // 异步保存到文件（不阻塞）
         if let Some(data_dir) = &self.data_dir {
             let logs = logger.get_all();
@@ -412,12 +418,12 @@ impl AccountPool {
 
         let content = tokio::fs::read_to_string(&file_path).await?;
         let mut logs: Vec<RequestLog> = serde_json::from_str(&content)?;
-        
+
         // 只保留最新的 1000 条（如果超过的话）
         if logs.len() > 1000 {
             logs = logs.split_off(logs.len() - 1000);
         }
-        
+
         let count = logs.len();
         let mut logger = self.request_logger.write().await;
         for log in logs {
@@ -438,8 +444,10 @@ impl AccountPool {
     pub async fn refresh_account_usage(&self, id: &str) -> anyhow::Result<UsageLimits> {
         // 获取 TokenManager
         let managers = self.token_managers.read().await;
-        let tm = managers.get(id).ok_or_else(|| anyhow::anyhow!("账号不存在"))?;
-        
+        let tm = managers
+            .get(id)
+            .ok_or_else(|| anyhow::anyhow!("账号不存在"))?;
+
         // 获取 access_token
         let mut tm_guard = tm.lock().await;
         let token = match tm_guard.ensure_valid_token().await {
@@ -447,7 +455,10 @@ impl AccountPool {
             Err(e) => {
                 let error_msg = e.to_string();
                 // 检测 403/suspended 错误，自动禁用账号
-                if error_msg.contains("403") || error_msg.contains("suspended") || error_msg.contains("SUSPENDED") {
+                if error_msg.contains("403")
+                    || error_msg.contains("suspended")
+                    || error_msg.contains("SUSPENDED")
+                {
                     drop(tm_guard);
                     drop(managers);
                     self.mark_invalid(id).await;
@@ -458,29 +469,32 @@ impl AccountPool {
         };
         drop(tm_guard);
         drop(managers);
-        
+
         // 调用 API 获取配额
         let usage = match super::usage::check_usage_limits(&token).await {
             Ok(u) => u,
             Err(e) => {
                 let error_msg = e.to_string();
                 // 检测 403/suspended 错误，自动禁用账号
-                if error_msg.contains("403") || error_msg.contains("suspended") || error_msg.contains("SUSPENDED") {
+                if error_msg.contains("403")
+                    || error_msg.contains("suspended")
+                    || error_msg.contains("SUSPENDED")
+                {
                     self.mark_invalid(id).await;
                     tracing::warn!("账号 {} 获取配额失败，已标记为失效: {}", id, error_msg);
                 }
                 return Err(e);
             }
         };
-        
+
         // 更新缓存
         let mut cache = self.usage_cache.write().await;
         cache.insert(id.to_string(), usage.clone());
         drop(cache);
-        
+
         // 保存到文件
         self.save_usage_cache().await;
-        
+
         Ok(usage)
     }
 
@@ -508,7 +522,7 @@ impl AccountPool {
 
         let content = tokio::fs::read_to_string(&file_path).await?;
         let loaded: HashMap<String, UsageLimits> = serde_json::from_str(&content)?;
-        
+
         let count = loaded.len();
         let mut cache = self.usage_cache.write().await;
         *cache = loaded;
@@ -589,7 +603,7 @@ impl StoredAccount {
 
     fn into_account(self) -> Account {
         use crate::kiro::model::credentials::KiroCredentials;
-        
+
         let credentials = KiroCredentials {
             access_token: None,
             refresh_token: self.refresh_token,

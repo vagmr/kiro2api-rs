@@ -5,7 +5,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Json, Response},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -36,15 +36,12 @@ async fn auth_middleware(
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim_start_matches("Bearer ").to_string());
-    
-    let query_key = request
-        .uri()
-        .query()
-        .and_then(|q| {
-            q.split('&')
-                .find(|p| p.starts_with("key="))
-                .map(|p| p.trim_start_matches("key=").to_string())
-        });
+
+    let query_key = request.uri().query().and_then(|q| {
+        q.split('&')
+            .find(|p| p.starts_with("key="))
+            .map(|p| p.trim_start_matches("key=").to_string())
+    });
 
     let provided_key = auth_header.or(query_key);
 
@@ -70,14 +67,20 @@ pub fn create_ui_router(state: UiState) -> Router {
         .route("/api/accounts/{id}/enable", post(enable_account))
         .route("/api/accounts/{id}/disable", post(disable_account))
         .route("/api/accounts/{id}/usage", get(get_account_usage))
-        .route("/api/accounts/{id}/usage/refresh", post(refresh_account_usage))
+        .route(
+            "/api/accounts/{id}/usage/refresh",
+            post(refresh_account_usage),
+        )
         .route("/api/strategy", get(get_strategy))
         .route("/api/strategy", post(set_strategy))
         .route("/api/logs", get(get_request_logs))
         .route("/api/logs/stats", get(get_request_stats))
         .route("/api/usage/refresh", post(refresh_all_usage))
         .route("/api/usage", get(get_all_usage))
-        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
         .with_state(state.clone());
 
     // 公开路由（登录页面）
@@ -187,7 +190,7 @@ async fn add_account(
     Json(req): Json<AddAccountRequest>,
 ) -> impl IntoResponse {
     let id = uuid::Uuid::new_v4().to_string();
-    
+
     let credentials = KiroCredentials {
         access_token: None,
         refresh_token: Some(req.refresh_token),
@@ -199,7 +202,7 @@ async fn add_account(
     };
 
     let account = Account::new(&id, req.name, credentials);
-    
+
     match state.pool.add_account(account).await {
         Ok(_) => (StatusCode::CREATED, Json(serde_json::json!({"id": id}))),
         Err(e) => (
@@ -226,7 +229,7 @@ async fn import_account(
     };
 
     let id = uuid::Uuid::new_v4().to_string();
-    
+
     // 自动检测认证方式
     let auth_method = if raw.client_id.is_some() && raw.client_secret.is_some() {
         "idc".to_string()
@@ -235,7 +238,8 @@ async fn import_account(
     };
 
     // 生成名称：优先使用自定义名称，其次 label，再次 email
-    let name = req.name
+    let name = req
+        .name
         .or(raw.label.clone())
         .or(raw.email.clone())
         .unwrap_or_else(|| "导入的账号".to_string());
@@ -251,7 +255,7 @@ async fn import_account(
     };
 
     let account = Account::new(&id, name, credentials);
-    
+
     match state.pool.add_account(account).await {
         Ok(_) => (StatusCode::CREATED, Json(serde_json::json!({"id": id}))),
         Err(e) => (
@@ -317,7 +321,12 @@ async fn set_strategy(
         "round-robin" => SelectionStrategy::RoundRobin,
         "random" => SelectionStrategy::Random,
         "least-used" => SelectionStrategy::LeastUsed,
-        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "无效的策略"}))),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "无效的策略"})),
+            )
+        }
     };
     state.pool.set_strategy(strategy).await;
     (StatusCode::OK, Json(serde_json::json!({"success": true})))
@@ -342,7 +351,10 @@ async fn get_account_usage(
 ) -> impl IntoResponse {
     match state.pool.get_account_usage(&id).await {
         Some(usage) => (StatusCode::OK, Json(serde_json::json!(usage))),
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "未找到配额信息，请先刷新"}))),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "未找到配额信息，请先刷新"})),
+        ),
     }
 }
 
@@ -353,7 +365,10 @@ async fn refresh_account_usage(
 ) -> impl IntoResponse {
     match state.pool.refresh_account_usage(&id).await {
         Ok(usage) => (StatusCode::OK, Json(serde_json::json!(usage))),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        ),
     }
 }
 
@@ -362,19 +377,17 @@ async fn refresh_all_usage(State(state): State<UiState>) -> impl IntoResponse {
     let results = state.pool.refresh_all_usage().await;
     let response: Vec<serde_json::Value> = results
         .into_iter()
-        .map(|(id, result)| {
-            match result {
-                Ok(usage) => serde_json::json!({
-                    "id": id,
-                    "success": true,
-                    "usage": usage
-                }),
-                Err(e) => serde_json::json!({
-                    "id": id,
-                    "success": false,
-                    "error": e
-                }),
-            }
+        .map(|(id, result)| match result {
+            Ok(usage) => serde_json::json!({
+                "id": id,
+                "success": true,
+                "usage": usage
+            }),
+            Err(e) => serde_json::json!({
+                "id": id,
+                "success": false,
+                "error": e
+            }),
         })
         .collect();
     Json(response)

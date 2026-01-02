@@ -41,7 +41,6 @@ pub struct KiroCredentials {
 }
 
 impl KiroCredentials {
-
     /// 获取默认凭证文件路径
     pub fn default_credentials_path() -> &'static str {
         "credentials.json"
@@ -51,7 +50,7 @@ impl KiroCredentials {
     pub fn from_env() -> Option<Self> {
         let refresh_token = env::var("REFRESH_TOKEN").ok();
         let auth_method = env::var("AUTH_METHOD").ok();
-        
+
         // 至少需要 refresh_token 和 auth_method
         if refresh_token.is_none() || auth_method.is_none() {
             return None;
@@ -61,7 +60,9 @@ impl KiroCredentials {
             access_token: env::var("ACCESS_TOKEN").ok(),
             refresh_token,
             profile_arn: env::var("PROFILE_ARN").ok(),
-            expires_at: env::var("EXPIRES_AT").ok().or_else(|| Some("2000-01-01T00:00:00Z".to_string())),
+            expires_at: env::var("EXPIRES_AT")
+                .ok()
+                .or_else(|| Some("2000-01-01T00:00:00Z".to_string())),
             auth_method,
             client_id: env::var("CLIENT_ID").ok(),
             client_secret: env::var("CLIENT_SECRET").ok(),
@@ -90,7 +91,7 @@ impl KiroCredentials {
             tracing::info!("从环境变量加载凭证");
             return Ok(creds);
         }
-        
+
         // 回退到文件加载
         Self::load(path)
     }
@@ -154,6 +155,9 @@ mod tests {
 
     #[test]
     fn test_default_credentials_path() {
-        assert_eq!(KiroCredentials::default_credentials_path(), "credentials.json");
+        assert_eq!(
+            KiroCredentials::default_credentials_path(),
+            "credentials.json"
+        );
     }
 }

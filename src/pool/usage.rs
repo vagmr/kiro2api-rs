@@ -101,7 +101,9 @@ impl RequestLogger {
         let failed = total - success;
         let total_input_tokens: i64 = self.logs.iter().map(|l| l.input_tokens as i64).sum();
         // 忽略 -1（流式请求无法统计）
-        let total_output_tokens: i64 = self.logs.iter()
+        let total_output_tokens: i64 = self
+            .logs
+            .iter()
             .filter(|l| l.output_tokens >= 0)
             .map(|l| l.output_tokens as i64)
             .sum();
@@ -138,7 +140,6 @@ impl Default for RequestLogger {
         Self::new(1000) // 默认保留 1000 条记录
     }
 }
-
 
 /// AWS 使用限制 API 响应结构
 #[derive(Debug, Deserialize)]
@@ -192,9 +193,9 @@ pub struct AwsSubscriptionInfo {
 /// 检查账号使用限制
 pub async fn check_usage_limits(access_token: &str) -> anyhow::Result<UsageLimits> {
     let client = reqwest::Client::new();
-    
+
     let url = "https://codewhisperer.us-east-1.amazonaws.com/getUsageLimits?isEmailRequired=true&origin=AI_EDITOR&resourceType=AGENTIC_REQUEST";
-    
+
     let response = client
         .get(url)
         .header("Authorization", format!("Bearer {}", access_token))
@@ -210,20 +211,20 @@ pub async fn check_usage_limits(access_token: &str) -> anyhow::Result<UsageLimit
     }
 
     let aws_response: AwsUsageLimitsResponse = response.json().await?;
-    
+
     // 解析 CREDIT 类型的使用限制
     for breakdown in &aws_response.usage_breakdown_list {
         if breakdown.resource_type == "CREDIT" {
             let mut total_limit = breakdown.usage_limit_with_precision.unwrap_or(0.0);
             let mut total_used = breakdown.current_usage_with_precision.unwrap_or(0.0);
-            
+
             let free_trial = if let Some(ft) = &breakdown.free_trial_info {
                 if ft.free_trial_status == "ACTIVE" {
                     let ft_limit = ft.usage_limit_with_precision.unwrap_or(0.0);
                     let ft_used = ft.current_usage_with_precision.unwrap_or(0.0);
                     total_limit += ft_limit;
                     total_used += ft_used;
-                    
+
                     Some(FreeTrialInfo {
                         status: ft.free_trial_status.clone(),
                         usage_limit: ft_limit,
@@ -239,9 +240,9 @@ pub async fn check_usage_limits(access_token: &str) -> anyhow::Result<UsageLimit
                 None
             };
 
-            let next_reset = aws_response.next_date_reset.map(|ts| {
-                DateTime::from_timestamp_millis(ts as i64).unwrap_or_default()
-            });
+            let next_reset = aws_response
+                .next_date_reset
+                .map(|ts| DateTime::from_timestamp_millis(ts as i64).unwrap_or_default());
 
             return Ok(UsageLimits {
                 resource_type: "CREDIT".to_string(),
@@ -250,8 +251,14 @@ pub async fn check_usage_limits(access_token: &str) -> anyhow::Result<UsageLimit
                 available: (total_limit - total_used).max(0.0),
                 next_reset,
                 free_trial,
-                user_email: aws_response.user_info.as_ref().and_then(|u| u.email.clone()),
-                subscription_type: aws_response.subscription_info.as_ref().and_then(|s| s.subscription_type.clone()),
+                user_email: aws_response
+                    .user_info
+                    .as_ref()
+                    .and_then(|u| u.email.clone()),
+                subscription_type: aws_response
+                    .subscription_info
+                    .as_ref()
+                    .and_then(|s| s.subscription_type.clone()),
             });
         }
     }

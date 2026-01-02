@@ -47,7 +47,8 @@ impl TokenManager {
     /// 如果 Token 过期或即将过期，会自动刷新
     pub async fn ensure_valid_token(&mut self) -> anyhow::Result<String> {
         if is_token_expired(&self.credentials) || is_token_expiring_soon(&self.credentials) {
-            self.credentials = refresh_token(&self.credentials, &self.config, self.proxy.as_ref()).await?;
+            self.credentials =
+                refresh_token(&self.credentials, &self.config, self.proxy.as_ref()).await?;
 
             // 刷新后再次检查 token 时间有效性
             if is_token_expired(&self.credentials) {
@@ -92,9 +93,7 @@ fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::Result<()> {
         bail!("refreshToken 为空");
     }
 
-    if refresh_token.len() < 100
-        || refresh_token.ends_with("...")
-        || refresh_token.contains("...")
+    if refresh_token.len() < 100 || refresh_token.ends_with("...") || refresh_token.contains("...")
     {
         bail!(
             "refreshToken 已被截断（长度: {} 字符）。\n\

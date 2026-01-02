@@ -3,8 +3,8 @@ mod http_client;
 mod kiro;
 mod model;
 mod pool;
-mod ui;
 pub mod token;
+mod ui;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -14,8 +14,8 @@ use clap::Parser;
 use kiro::model::credentials::KiroCredentials;
 use kiro::provider::KiroProvider;
 use kiro::token_manager::TokenManager;
-use model::config::Config;
 use model::arg::Args;
+use model::config::Config;
 use pool::{Account, AccountPool};
 
 #[tokio::main]
@@ -32,12 +32,15 @@ async fn main() {
         .init();
 
     // 加载配置
-    let config_path = args.config.clone().unwrap_or_else(|| Config::default_config_path().to_string());
+    let config_path = args
+        .config
+        .clone()
+        .unwrap_or_else(|| Config::default_config_path().to_string());
     let mut config = Config::load(&config_path).unwrap_or_else(|e| {
         tracing::warn!("加载配置文件失败: {}, 使用默认配置", e);
         Config::default()
     });
-    
+
     // 从环境变量覆盖配置
     config.override_from_env();
 
@@ -76,7 +79,7 @@ async fn main() {
     // 启动服务器
     let addr = format!("{}:{}", config.host, config.port);
     tracing::info!("启动 Anthropic API 端点: {}", addr);
-    tracing::info!("API Key: {}***", &api_key[..(api_key.len()/2).min(10)]);
+    tracing::info!("API Key: {}***", &api_key[..(api_key.len() / 2).min(10)]);
     tracing::info!("可用 API:");
     tracing::info!("  GET  /v1/models");
     tracing::info!("  POST /v1/messages");
@@ -97,18 +100,24 @@ async fn create_single_mode_app(
     proxy_config: Option<http_client::ProxyConfig>,
 ) -> Router {
     // 加载凭证（优先环境变量）
-    let credentials_path = args.credentials.clone()
+    let credentials_path = args
+        .credentials
+        .clone()
         .unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
-    let credentials = KiroCredentials::load_with_env_fallback(&credentials_path).unwrap_or_else(|e| {
-        tracing::error!("加载凭证失败: {}", e);
-        tracing::error!("请设置环境变量 (REFRESH_TOKEN, AUTH_METHOD) 或提供 credentials.json 文件");
-        std::process::exit(1);
-    });
+    let credentials =
+        KiroCredentials::load_with_env_fallback(&credentials_path).unwrap_or_else(|e| {
+            tracing::error!("加载凭证失败: {}", e);
+            tracing::error!(
+                "请设置环境变量 (REFRESH_TOKEN, AUTH_METHOD) 或提供 credentials.json 文件"
+            );
+            std::process::exit(1);
+        });
 
     tracing::debug!("凭证已加载: {:?}", credentials);
 
     // 创建 KiroProvider
-    let token_manager = TokenManager::new(config.clone(), credentials.clone(), proxy_config.clone());
+    let token_manager =
+        TokenManager::new(config.clone(), credentials.clone(), proxy_config.clone());
     let kiro_provider = KiroProvider::with_proxy(token_manager, proxy_config.clone());
 
     // 初始化 count_tokens 配置
@@ -195,7 +204,5 @@ async fn create_pool_mode_app(
     let ui_router = ui::create_ui_router(ui_state);
 
     // 合并路由
-    Router::new()
-        .merge(api_router)
-        .merge(ui_router)
+    Router::new().merge(api_router).merge(ui_router)
 }

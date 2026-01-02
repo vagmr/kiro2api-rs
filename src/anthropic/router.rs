@@ -62,10 +62,7 @@ pub fn create_router_with_provider(
 }
 
 /// 创建带有账号池的 Anthropic API 路由
-pub fn create_router_with_pool(
-    api_key: impl Into<String>,
-    pool: Arc<AccountPool>,
-) -> Router {
+pub fn create_router_with_pool(api_key: impl Into<String>, pool: Arc<AccountPool>) -> Router {
     let state = AppState::new(api_key).with_account_pool(pool);
 
     // 需要认证的 /v1 路由

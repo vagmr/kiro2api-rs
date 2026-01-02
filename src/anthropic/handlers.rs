@@ -2,6 +2,10 @@
 
 use std::convert::Infallible;
 
+use crate::kiro::model::events::Event;
+use crate::kiro::model::requests::kiro::KiroRequest;
+use crate::kiro::parser::decoder::EventStreamDecoder;
+use crate::token;
 use axum::{
     body::Body,
     extract::State,
@@ -15,10 +19,6 @@ use serde_json::json;
 use std::time::Duration;
 use tokio::time::interval;
 use uuid::Uuid;
-use crate::token;
-use crate::kiro::model::events::Event;
-use crate::kiro::model::requests::kiro::KiroRequest;
-use crate::kiro::parser::decoder::EventStreamDecoder;
 
 use super::converter::{convert_request, ConversionError};
 use super::middleware::AppState;
@@ -77,7 +77,7 @@ pub async fn post_messages(
     JsonExtractor(payload): JsonExtractor<MessagesRequest>,
 ) -> Response {
     let start_time = std::time::Instant::now();
-    
+
     tracing::info!(
         model = %payload.model,
         max_tokens = %payload.max_tokens,
@@ -89,14 +89,12 @@ pub async fn post_messages(
     // 获取 provider：优先从账号池获取，否则使用单账号模式
     let (provider, account_id, account_name, pool_ref) = if let Some(pool) = &state.account_pool {
         match pool.select_account().await {
-            Some(selected) => {
-                (
-                    selected.provider,
-                    Some(selected.id),
-                    selected.name,
-                    Some(pool.clone()),
-                )
-            }
+            Some(selected) => (
+                selected.provider,
+                Some(selected.id),
+                selected.name,
+                Some(pool.clone()),
+            ),
             None => {
                 tracing::error!("账号池中没有可用账号");
                 return (
@@ -141,6 +139,10 @@ pub async fn post_messages(
                 ConversionError::EmptyMessages => {
                     ("invalid_request_error", "消息列表为空".to_string())
                 }
+                ConversionError::NoUserMessagesAtEnd => (
+                    "invalid_request_error",
+                    "消息列表末尾没有 user 消息，无法构建 current_message".to_string(),
+                ),
             };
             tracing::warn!("请求转换失败: {}", e);
             return (
@@ -175,20 +177,47 @@ pub async fn post_messages(
     tracing::debug!("Kiro request body: {}", request_body);
 
     // 估算输入 tokens
-    let input_tokens = token::count_all_tokens(payload.model.clone(), payload.system, payload.messages, payload.tools) as i32;
+    let input_tokens = token::count_all_tokens(
+        payload.model.clone(),
+        payload.system,
+        payload.messages,
+        payload.tools,
+    ) as i32;
 
     // 检查是否启用了thinking
-    let thinking_enabled = payload.thinking
+    let thinking_enabled = payload
+        .thinking
         .as_ref()
         .map(|t| t.thinking_type == "enabled")
         .unwrap_or(false);
 
     if payload.stream {
         // 流式响应
-        handle_stream_request(provider, &request_body, &payload.model, input_tokens, thinking_enabled, account_id, account_name, pool_ref, start_time).await
+        handle_stream_request(
+            provider,
+            &request_body,
+            &payload.model,
+            input_tokens,
+            thinking_enabled,
+            account_id,
+            account_name,
+            pool_ref,
+            start_time,
+        )
+        .await
     } else {
         // 非流式响应
-        handle_non_stream_request(provider, &request_body, &payload.model, input_tokens, account_id, account_name, pool_ref, start_time).await
+        handle_non_stream_request(
+            provider,
+            &request_body,
+            &payload.model,
+            input_tokens,
+            account_id,
+            account_name,
+            pool_ref,
+            start_time,
+        )
+        .await
     }
 }
 
@@ -217,12 +246,12 @@ async fn handle_stream_request(
         Err(e) => {
             let error_msg = e.to_string();
             tracing::error!("Kiro API 调用失败: {}", error_msg);
-            
+
             // 记录错误到账号池
             if let (Some(id), Some(pool)) = (&account_id, &pool) {
                 let is_rate_limit = error_msg.contains("429") || error_msg.contains("rate");
                 let is_suspended = error_msg.contains("suspended") || error_msg.contains("403");
-                
+
                 if is_suspended {
                     pool.mark_invalid(id).await;
                     tracing::warn!("账号 {} 已被标记为失效（暂停）", id);
@@ -230,7 +259,7 @@ async fn handle_stream_request(
                     pool.record_error(id, is_rate_limit).await;
                     tracing::warn!("账号 {} 记录错误，限流: {}", id, is_rate_limit);
                 }
-                
+
                 // 记录失败的请求
                 let log = crate::pool::RequestLog {
                     id: uuid::Uuid::new_v4().to_string(),
@@ -246,7 +275,7 @@ async fn handle_stream_request(
                 };
                 pool.add_request_log(log).await;
             }
-            
+
             return (
                 StatusCode::BAD_GATEWAY,
                 Json(ErrorResponse::new(
@@ -392,7 +421,7 @@ fn create_sse_stream(
                             tracing::error!("读取响应流失败: {}", e);
                             // 发送最终事件并结束
                             let final_events = ctx.generate_final_events();
-                            
+
                             // 发送统计信息
                             let final_input_tokens = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
                             if let Some(tx) = stats_tx {
@@ -401,7 +430,7 @@ fn create_sse_stream(
                                     input_tokens: final_input_tokens,
                                 });
                             }
-                            
+
                             let bytes: Vec<Result<Bytes, Infallible>> = final_events
                                 .into_iter()
                                 .map(|e| Ok(Bytes::from(e.to_sse_string())))
@@ -411,7 +440,7 @@ fn create_sse_stream(
                         None => {
                             // 流结束，发送最终事件
                             let final_events = ctx.generate_final_events();
-                            
+
                             // 发送统计信息
                             let final_input_tokens = ctx.context_input_tokens.unwrap_or(ctx.input_tokens);
                             if let Some(tx) = stats_tx {
@@ -420,7 +449,7 @@ fn create_sse_stream(
                                     input_tokens: final_input_tokens,
                                 });
                             }
-                            
+
                             let bytes: Vec<Result<Bytes, Infallible>> = final_events
                                 .into_iter()
                                 .map(|e| Ok(Bytes::from(e.to_sse_string())))
@@ -463,12 +492,12 @@ async fn handle_non_stream_request(
         Err(e) => {
             let error_msg = e.to_string();
             tracing::error!("Kiro API 调用失败: {}", error_msg);
-            
+
             // 记录错误到账号池
             if let (Some(id), Some(pool)) = (&account_id, &pool) {
                 let is_rate_limit = error_msg.contains("429") || error_msg.contains("rate");
                 let is_suspended = error_msg.contains("suspended") || error_msg.contains("403");
-                
+
                 if is_suspended {
                     pool.mark_invalid(id).await;
                     tracing::warn!("账号 {} 已被标记为失效（暂停）", id);
@@ -476,7 +505,7 @@ async fn handle_non_stream_request(
                     pool.record_error(id, is_rate_limit).await;
                     tracing::warn!("账号 {} 记录错误，限流: {}", id, is_rate_limit);
                 }
-                
+
                 // 记录失败的请求
                 let log = crate::pool::RequestLog {
                     id: uuid::Uuid::new_v4().to_string(),
@@ -492,7 +521,7 @@ async fn handle_non_stream_request(
                 };
                 pool.add_request_log(log).await;
             }
-            
+
             return (
                 StatusCode::BAD_GATEWAY,
                 Json(ErrorResponse::new(
@@ -534,7 +563,8 @@ async fn handle_non_stream_request(
     let mut context_input_tokens: Option<i32> = None;
 
     // 收集工具调用的增量 JSON
-    let mut tool_json_buffers: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut tool_json_buffers: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     for result in decoder.decode_iter() {
         match result {
@@ -575,7 +605,10 @@ async fn handle_non_stream_request(
                         Event::ContextUsage(context_usage) => {
                             // 从上下文使用百分比计算实际的 input_tokens
                             // 公式: percentage * 200000 / 100 = percentage * 2000
-                            let actual_input_tokens = (context_usage.context_usage_percentage * (CONTEXT_WINDOW_SIZE as f64) / 100.0) as i32;
+                            let actual_input_tokens = (context_usage.context_usage_percentage
+                                * (CONTEXT_WINDOW_SIZE as f64)
+                                / 100.0)
+                                as i32;
                             context_input_tokens = Some(actual_input_tokens);
                             tracing::debug!(
                                 "收到 contextUsageEvent: {}%, 计算 input_tokens: {}",
@@ -656,19 +689,24 @@ async fn handle_non_stream_request(
     (StatusCode::OK, Json(response_body)).into_response()
 }
 
-
-
 /// POST /v1/messages/count_tokens
 ///
 /// 计算消息的 token 数量
-pub async fn count_tokens(JsonExtractor(payload): JsonExtractor<CountTokensRequest>) -> impl IntoResponse {
+pub async fn count_tokens(
+    JsonExtractor(payload): JsonExtractor<CountTokensRequest>,
+) -> impl IntoResponse {
     tracing::info!(
         model = %payload.model,
         message_count = %payload.messages.len(),
         "Received POST /v1/messages/count_tokens request"
     );
 
-    let total_tokens = token::count_all_tokens(payload.model, payload.system, payload.messages, payload.tools) as i32;
+    let total_tokens = token::count_all_tokens(
+        payload.model,
+        payload.system,
+        payload.messages,
+        payload.tools,
+    ) as i32;
 
     Json(CountTokensResponse {
         input_tokens: total_tokens.max(1) as i32,

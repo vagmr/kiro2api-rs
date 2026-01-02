@@ -36,7 +36,7 @@ fn find_char_boundary(s: &str, target: usize) -> usize {
 /// - 单引号 (')：字符串
 const QUOTE_CHARS: &[u8] = &[
     b'`', b'"', b'\'', b'\\', b'#', b'!', b'@', b'$', b'%', b'^', b'&', b'*', b'(', b')', b'-',
-    b'_', b'=', b'+', b'[', b']', b'{', b'}', b';', b':', b'<', b'>', b',', b'.', b'?', b'/'
+    b'_', b'=', b'+', b'[', b']', b'{', b'}', b';', b':', b'<', b'>', b',', b'.', b'?', b'/',
 ];
 
 /// 检查指定位置的字符是否是引用字符
@@ -319,7 +319,12 @@ impl SseStateManager {
         // 确保块已启动
         if let Some(block) = self.active_blocks.get(&index) {
             if !block.started || block.stopped {
-                tracing::warn!("块 {} 状态异常: started={}, stopped={}", index, block.started, block.stopped);
+                tracing::warn!(
+                    "块 {} 状态异常: started={}, stopped={}",
+                    index,
+                    block.started,
+                    block.stopped
+                );
                 return None;
             }
         } else {
@@ -435,7 +440,11 @@ pub struct StreamContext {
 
 impl StreamContext {
     /// 创建启用thinking的StreamContext
-    pub fn new_with_thinking(model: impl Into<String>, input_tokens: i32, thinking_enabled: bool) -> Self {
+    pub fn new_with_thinking(
+        model: impl Into<String>,
+        input_tokens: i32,
+        thinking_enabled: bool,
+    ) -> Self {
         Self {
             state_manager: SseStateManager::new(),
             model: model.into(),
@@ -515,16 +524,14 @@ impl StreamContext {
     /// 处理 Kiro 事件并转换为 Anthropic SSE 事件
     pub fn process_kiro_event(&mut self, event: &Event) -> Vec<SseEvent> {
         match event {
-            Event::AssistantResponse(resp) => {
-                self.process_assistant_response(&resp.content)
-            }
-            Event::ToolUse(tool_use) => {
-                self.process_tool_use(tool_use)
-            }
+            Event::AssistantResponse(resp) => self.process_assistant_response(&resp.content),
+            Event::ToolUse(tool_use) => self.process_tool_use(tool_use),
             Event::ContextUsage(context_usage) => {
                 // 从上下文使用百分比计算实际的 input_tokens
                 // 公式: percentage * 200000 / 100 = percentage * 2000
-                let actual_input_tokens = (context_usage.context_usage_percentage * (CONTEXT_WINDOW_SIZE as f64) / 100.0) as i32;
+                let actual_input_tokens = (context_usage.context_usage_percentage
+                    * (CONTEXT_WINDOW_SIZE as f64)
+                    / 100.0) as i32;
                 self.context_input_tokens = Some(actual_input_tokens);
                 tracing::debug!(
                     "收到 contextUsageEvent: {}%, 计算 input_tokens: {}",
@@ -533,11 +540,17 @@ impl StreamContext {
                 );
                 Vec::new()
             }
-            Event::Error { error_code, error_message } => {
+            Event::Error {
+                error_code,
+                error_message,
+            } => {
                 tracing::error!("收到错误事件: {} - {}", error_code, error_message);
                 Vec::new()
             }
-            Event::Exception { exception_type, message } => {
+            Event::Exception {
+                exception_type,
+                message,
+            } => {
                 // 处理 ContentLengthExceededException
                 if exception_type == "ContentLengthExceededException" {
                     self.state_manager.set_stop_reason("max_tokens");
@@ -584,11 +597,12 @@ impl StreamContext {
                     if !before_thinking.is_empty() {
                         events.extend(self.create_text_delta_events(&before_thinking));
                     }
-                    
+
                     // 进入 thinking 块
                     self.in_thinking_block = true;
-                    self.thinking_buffer = self.thinking_buffer[start_pos + "<thinking>".len()..].to_string();
-                    
+                    self.thinking_buffer =
+                        self.thinking_buffer[start_pos + "<thinking>".len()..].to_string();
+
                     // 创建 thinking 块的 content_block_start 事件
                     let thinking_index = self.state_manager.next_block_index();
                     self.thinking_block_index = Some(thinking_index);
@@ -608,7 +622,10 @@ impl StreamContext {
                 } else {
                     // 没有找到 <thinking>，检查是否可能是部分标签
                     // 保留可能是部分标签的内容
-                    let target_len = self.thinking_buffer.len().saturating_sub("<thinking>".len());
+                    let target_len = self
+                        .thinking_buffer
+                        .len()
+                        .saturating_sub("<thinking>".len());
                     let safe_len = find_char_boundary(&self.thinking_buffer, target_len);
                     if safe_len > 0 {
                         let safe_content = self.thinking_buffer[..safe_len].to_string();
@@ -626,10 +643,12 @@ impl StreamContext {
                     let thinking_content = self.thinking_buffer[..end_pos].to_string();
                     if !thinking_content.is_empty() {
                         if let Some(thinking_index) = self.thinking_block_index {
-                            events.push(self.create_thinking_delta_event(thinking_index, &thinking_content));
+                            events.push(
+                                self.create_thinking_delta_event(thinking_index, &thinking_content),
+                            );
                         }
                     }
-                    
+
                     // 结束 thinking 块
                     self.in_thinking_block = false;
                     self.thinking_extracted = true;
@@ -639,22 +658,30 @@ impl StreamContext {
                         // 先发送空的 thinking_delta
                         events.push(self.create_thinking_delta_event(thinking_index, ""));
                         // 再发送 content_block_stop
-                        if let Some(stop_event) = self.state_manager.handle_content_block_stop(thinking_index) {
+                        if let Some(stop_event) =
+                            self.state_manager.handle_content_block_stop(thinking_index)
+                        {
                             events.push(stop_event);
                         }
                     }
-                    
-                    self.thinking_buffer = self.thinking_buffer[end_pos + "</thinking>".len()..].to_string();
+
+                    self.thinking_buffer =
+                        self.thinking_buffer[end_pos + "</thinking>".len()..].to_string();
                 } else {
                     // 没有找到结束标签，发送当前缓冲区内容作为 thinking_delta
                     // 保留可能是部分标签的内容
-                    let target_len = self.thinking_buffer.len().saturating_sub("</thinking>".len());
+                    let target_len = self
+                        .thinking_buffer
+                        .len()
+                        .saturating_sub("</thinking>".len());
                     let safe_len = find_char_boundary(&self.thinking_buffer, target_len);
                     if safe_len > 0 {
                         let safe_content = self.thinking_buffer[..safe_len].to_string();
                         if !safe_content.is_empty() {
                             if let Some(thinking_index) = self.thinking_block_index {
-                                events.push(self.create_thinking_delta_event(thinking_index, &safe_content));
+                                events.push(
+                                    self.create_thinking_delta_event(thinking_index, &safe_content),
+                                );
                             }
                         }
                         self.thinking_buffer = self.thinking_buffer[safe_len..].to_string();
@@ -776,7 +803,8 @@ impl StreamContext {
             idx
         } else {
             let idx = self.state_manager.next_block_index();
-            self.tool_block_indices.insert(tool_use.tool_use_id.clone(), idx);
+            self.tool_block_indices
+                .insert(tool_use.tool_use_id.clone(), idx);
             idx
         };
 
@@ -835,14 +863,18 @@ impl StreamContext {
             if self.in_thinking_block {
                 // 如果还在 thinking 块内，发送剩余内容作为 thinking_delta
                 if let Some(thinking_index) = self.thinking_block_index {
-                    events.push(self.create_thinking_delta_event(thinking_index, &self.thinking_buffer));
+                    events.push(
+                        self.create_thinking_delta_event(thinking_index, &self.thinking_buffer),
+                    );
                 }
                 // 关闭 thinking 块：先发送空的 thinking_delta，再发送 content_block_stop
                 if let Some(thinking_index) = self.thinking_block_index {
                     // 先发送空的 thinking_delta
                     events.push(self.create_thinking_delta_event(thinking_index, ""));
                     // 再发送 content_block_stop
-                    if let Some(stop_event) = self.state_manager.handle_content_block_stop(thinking_index) {
+                    if let Some(stop_event) =
+                        self.state_manager.handle_content_block_stop(thinking_index)
+                    {
                         events.push(stop_event);
                     }
                 }
@@ -937,11 +969,16 @@ mod tests {
         let mut ctx = StreamContext::new_with_thinking("test-model", 1, false);
 
         let initial_events = ctx.generate_initial_events();
-        assert!(initial_events
-            .iter()
-            .any(|e| e.event == "content_block_start" && e.data["content_block"]["type"] == "text"));
+        assert!(
+            initial_events
+                .iter()
+                .any(|e| e.event == "content_block_start"
+                    && e.data["content_block"]["type"] == "text")
+        );
 
-        let initial_text_index = ctx.text_block_index.expect("initial text block index should exist");
+        let initial_text_index = ctx
+            .text_block_index
+            .expect("initial text block index should exist");
 
         // tool_use 开始会自动关闭现有 text block
         let tool_events = ctx.process_tool_use(&crate::kiro::model::events::ToolUseEvent {
@@ -967,7 +1004,10 @@ mod tests {
                 None
             }
         });
-        assert!(new_text_start_index.is_some(), "should start a new text block");
+        assert!(
+            new_text_start_index.is_some(),
+            "should start a new text block"
+        );
         assert_ne!(
             new_text_start_index.unwrap(),
             initial_text_index as i64,
@@ -1029,9 +1069,18 @@ mod tests {
             e.event == "content_block_start" && e.data["content_block"]["type"] == "tool_use"
         });
 
-        assert!(text_start_index.is_some(), "should start a text block to flush buffered text");
-        assert!(pos_text_delta.is_some(), "should flush buffered text as text_delta");
-        assert!(pos_text_stop.is_some(), "should stop text block before tool_use block starts");
+        assert!(
+            text_start_index.is_some(),
+            "should start a text block to flush buffered text"
+        );
+        assert!(
+            pos_text_delta.is_some(),
+            "should flush buffered text as text_delta"
+        );
+        assert!(
+            pos_text_stop.is_some(),
+            "should stop text block before tool_use block starts"
+        );
         assert!(pos_tool_start.is_some(), "should start tool_use block");
 
         let pos_text_delta = pos_text_delta.unwrap();
@@ -1071,10 +1120,7 @@ mod tests {
     fn test_find_real_thinking_start_tag_with_backticks() {
         // 被反引号包裹的应该被跳过
         assert_eq!(find_real_thinking_start_tag("`<thinking>`"), None);
-        assert_eq!(
-            find_real_thinking_start_tag("use `<thinking>` tag"),
-            None
-        );
+        assert_eq!(find_real_thinking_start_tag("use `<thinking>` tag"), None);
 
         // 先有被包裹的，后有真正的开始标签
         assert_eq!(
@@ -1087,10 +1133,7 @@ mod tests {
     fn test_find_real_thinking_start_tag_with_quotes() {
         // 被双引号包裹的应该被跳过
         assert_eq!(find_real_thinking_start_tag("\"<thinking>\""), None);
-        assert_eq!(
-            find_real_thinking_start_tag("the \"<thinking>\" tag"),
-            None
-        );
+        assert_eq!(find_real_thinking_start_tag("the \"<thinking>\" tag"), None);
 
         // 被单引号包裹的应该被跳过
         assert_eq!(find_real_thinking_start_tag("'<thinking>'"), None);
@@ -1106,7 +1149,10 @@ mod tests {
     fn test_find_real_thinking_end_tag_basic() {
         // 基本情况：正常的结束标签后面有双换行符
         assert_eq!(find_real_thinking_end_tag("</thinking>\n\n"), Some(0));
-        assert_eq!(find_real_thinking_end_tag("content</thinking>\n\n"), Some(7));
+        assert_eq!(
+            find_real_thinking_end_tag("content</thinking>\n\n"),
+            Some(7)
+        );
         assert_eq!(
             find_real_thinking_end_tag("some text</thinking>\n\nmore text"),
             Some(9)
@@ -1179,9 +1225,10 @@ mod tests {
 
         // 多种引用字符混合
         assert_eq!(
-            find_real_thinking_end_tag("`</thinking>` and \"</thinking>\" and '</thinking>' done</thinking>\n\n"),
+            find_real_thinking_end_tag(
+                "`</thinking>` and \"</thinking>\" and '</thinking>' done</thinking>\n\n"
+            ),
             Some(54)
         );
     }
-
 }
